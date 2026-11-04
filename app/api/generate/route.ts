@@ -15,7 +15,7 @@ export async function POST(request: Request) {
     const apiKey = process.env.MAGIC_HOUR_API_KEY;
     if (!apiKey) {
       return NextResponse.json(
-        { error: 'MAGIC_HOUR_API_KEY در .env.local تنظیم نشده است.' },
+        { error: 'MAGIC_HOUR_API_KEY در متغیرهای محیطی تنظیم نشده است.' },
         { status: 500 }
       );
     }
@@ -29,7 +29,7 @@ export async function POST(request: Request) {
       },
       body: JSON.stringify({
         model: 'wan-2.2',
-        end_seconds: 5,
+        end_seconds: 5, 
         style: { prompt: story },
         resolution: '480p',
         aspect_ratio: '16:9',
@@ -79,10 +79,13 @@ export async function POST(request: Request) {
     // ۳. دانلود و ذخیره در Vercel Blob
     const videoRes = await fetch(videoUrl);
     if (!videoRes.ok) throw new Error('دانلود ویدیوی تولیدشده ناموفق بود.');
+    
     const arrayBuffer = await videoRes.arrayBuffer();
-    const uint8Array = new Uint8Array(arrayBuffer);
+    
+    // 💡 اصلاح تایپ‌اسکریپت: استفاده از Buffer به جای Uint8Array برای Vercel Blob
+    const buffer = Buffer.from(arrayBuffer);
 
-    const blob = await put(`story-video-${Date.now()}.mp4`, uint8Array, {
+    const blob = await put(`story-video-${Date.now()}.mp4`, buffer, {
       access: 'private',
       contentType: 'video/mp4',
     });
