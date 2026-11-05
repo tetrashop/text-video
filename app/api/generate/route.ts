@@ -29,7 +29,7 @@ export async function POST(request: Request) {
       },
       body: JSON.stringify({
         model: 'wan-2.2',
-        end_seconds: 1, 
+        end_seconds: 3, 
         style: { prompt: story },
         resolution: '480p',
         aspect_ratio: '16:9',
