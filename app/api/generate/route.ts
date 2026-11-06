@@ -20,7 +20,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // ۱. ثبت درخواست در Magic Hour
+    // ۱. ثبت درخواست در Magic Hour با مدل ارزان‌تر ltx-2.5
     const submitRes = await fetch(`${MAGIC_HOUR_BASE}/text-to-video`, {
       method: 'POST',
       headers: {
@@ -28,8 +28,8 @@ export async function POST(request: Request) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'wan-2.2',
-        end_seconds: 3, 
+        model: 'ltx-2.5', // 👈 تغییر مدل به ارزان‌ترین گزینه پلن رایگان
+        end_seconds: 3,   // حداقل زمان مجاز
         style: { prompt: story },
         resolution: '480p',
         aspect_ratio: '16:9',
@@ -81,8 +81,6 @@ export async function POST(request: Request) {
     if (!videoRes.ok) throw new Error('دانلود ویدیوی تولیدشده ناموفق بود.');
     
     const arrayBuffer = await videoRes.arrayBuffer();
-    
-    // 💡 اصلاح تایپ‌اسکریپت: استفاده از Buffer به جای Uint8Array برای Vercel Blob
     const buffer = Buffer.from(arrayBuffer);
 
     const blob = await put(`story-video-${Date.now()}.mp4`, buffer, {
@@ -90,7 +88,7 @@ export async function POST(request: Request) {
       contentType: 'video/mp4',
     });
 
-    // ۴. بازگشت لینک دانلود از طریق مسیر اختصاصی خودمان
+    // ۴. بازگشت لینک دانلود
     const origin = new URL(request.url).origin;
     const downloadUrl = `${origin}/api/download?pathname=${encodeURIComponent(blob.pathname)}`;
 
@@ -98,7 +96,7 @@ export async function POST(request: Request) {
       success: true,
       downloadUrl,
       provider: 'Magic Hour',
-      model: 'wan-2.2',
+      model: 'ltx-2.5',
     });
   } catch (error: any) {
     console.error('خطا در تولید ویدیو:', error);
