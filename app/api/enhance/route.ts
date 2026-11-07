@@ -1,4 +1,3 @@
-// app/api/enhance/route.ts
 import { NextResponse } from 'next/server';
 
 export async function POST(request: Request) {
@@ -8,23 +7,22 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'لطفاً متن داستان را وارد کنید.' }, { status: 400 });
     }
 
-    // 👇 تغییرات اینجاست: استفاده از OpenRouter
     const apiKey = process.env.OPENROUTER_API_KEY; 
     const baseUrl = 'https://openrouter.ai/api/v1';
-    const modelName = 'qwen/qwen3-vl-30b-a3b-thinking:free'; // یک مدل رایگان و قدرتمند
+    const modelName = 'qwen/qwen3-vl-30b-a3b-thinking:free';
 
     if (!apiKey) {
       return NextResponse.json({ prompt: story, note: 'کلید OpenRouter تنظیم نشده، از متن خام استفاده می‌شود.' });
     }
 
-    const systemPrompt = `You are an expert at writing cinematic video generation prompts. Convert the following story into a detailed, vivid, and concise English prompt suitable for an AI video generator. Focus on visual details, lighting, camera movement, and atmosphere. Return ONLY the prompt text, without any explanations.`;
+    const systemPrompt = `You are an expert at writing cinematic video generation prompts. Convert the following story into a detailed, vivid, and concise English prompt suitable for an AI video generator. Focus on visual details, lighting, camera movement, and atmosphere. Return ONLY the prompt text, without any explanations or quotes.`;
 
     const res = await fetch(`${baseUrl}/chat/completions`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://text-video-one.vercel.app', // اختیاری برای رتبه‌بندی
+        'HTTP-Referer': 'https://text-video-one.vercel.app',
         'X-Title': 'Story to Video',
       },
       body: JSON.stringify({
