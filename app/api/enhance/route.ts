@@ -10,7 +10,7 @@ export async function POST(request: Request) {
     const apiKey = process.env.OPENROUTER_API_KEY; 
     const baseUrl = 'https://openrouter.ai/api/v1';
     // مدل رایگان و پایدار
-    const modelName = 'qwen/qwen-2.5-7b-instruct:free'; 
+    const modelName = 'google/gemma-4-26b-a4b-it:free'; 
 
     if (!apiKey) {
       return NextResponse.json({ prompt: story, note: 'کلید OpenRouter تنظیم نشده، از متن خام استفاده می‌شود.' });
