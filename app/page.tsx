@@ -16,9 +16,10 @@ export default function Home() {
   const [estimatedCredits, setEstimatedCredits] = useState(72);
 
   useEffect(() => {
-    fetch('/api/credits').then(r => r.json()).then(d => {
-      if (d.credits !== undefined) setCredits(d.credits);
-    });
+    fetch('/api/credits')
+      .then(r => r.json())
+      .then(d => { if (d && d.credits !== undefined) setCredits(d.credits); })
+      .catch(() => console.log('خطا در خواندن اعتبار'));
   }, []);
 
   useEffect(() => {
@@ -28,9 +29,8 @@ export default function Home() {
       body: JSON.stringify({ duration }),
     })
       .then(r => r.json())
-      .then(d => {
-        if (d.credits) setEstimatedCredits(d.credits);
-      });
+      .then(d => { if (d && d.credits) setEstimatedCredits(d.credits); })
+      .catch(() => console.log('خطا در خواندن هزینه'));
   }, [duration]);
 
   async function handleEnhance() {
@@ -43,14 +43,18 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ story: rawStory }),
       });
-      const data = await res.json();
+      
+      const text = await res.text();
+      let data;
+      try { data = JSON.parse(text); } catch (e) { throw new Error('پاسخ نامعتبر از سرور'); }
+
       if (data.prompt) {
         setEnhancedPrompt(data.prompt);
       } else if (data.error) {
         throw new Error(data.error);
       }
     } catch (err: any) {
-      setError(err.message);
+      setError(typeof err === 'string' ? err : (err.message || 'خطای شبکه در بهینه‌سازی'));
     } finally {
       setEnhancing(false);
     }
@@ -67,7 +71,7 @@ export default function Home() {
     setLoading(true);
     setError(null);
     setVideoUrl(null);
-    setStatusText('در حال ارسال درخواست به Magic Hour...');
+    setStatusText('در حال ارسال درخواست...');
 
     try {
       const res = await fetch('/api/generate', {
@@ -75,7 +79,11 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt: finalPrompt, duration }),
       });
-      const data = await res.json();
+      
+      const text = await res.text();
+      let data;
+      try { data = JSON.parse(text); } catch (e) { throw new Error('پاسخ نامعتبر از سرور'); }
+
       if (!res.ok) throw new Error(data.error || 'خطا در شروع تولید');
 
       const projectId = data.projectId;
@@ -87,15 +95,17 @@ export default function Home() {
           const statusRes = await fetch(`/api/status?projectId=${projectId}`);
           if (!statusRes.ok) {
             consecutiveFailures++;
-            if (consecutiveFailures > 5) {
+            if (consecutiveFailures > 10) {
               clearInterval(checkInterval);
-              throw new Error('ارتباط با سرور بیش از حد قطع شد. لطفاً صفحه را رفرش کنید.');
+              throw new Error('ارتباط با سرور بیش از حد قطع شد.');
             }
             return;
           }
 
           consecutiveFailures = 0;
-          const statusData = await statusRes.json();
+          const statusTextResponse = await statusRes.text();
+          let statusData;
+          try { statusData = JSON.parse(statusTextResponse); } catch (e) { return; }
 
           if (statusData.status === 'complete') {
             clearInterval(checkInterval);
@@ -103,23 +113,23 @@ export default function Home() {
             setStatusText('');
             setLoading(false);
             fetch('/api/credits').then(r => r.json()).then(d => {
-              if (d.credits !== undefined) setCredits(d.credits);
-            });
+              if (d && d.credits !== undefined) setCredits(d.credits);
+            }).catch(() => {});
           } else if (statusData.status === 'error') {
             clearInterval(checkInterval);
             throw new Error(statusData.message || 'خطا در ساخت');
           }
         } catch (err: any) {
-          if (err.message.includes('Failed to fetch')) return;
+          if (err.message && err.message.includes('Failed to fetch')) return;
           clearInterval(checkInterval);
-          setError(err.message);
+          setError(typeof err === 'string' ? err : (err.message || 'خطای نامشخص'));
           setLoading(false);
           setStatusText('');
         }
       }, 10000);
 
     } catch (err: any) {
-      setError(err.message);
+      setError(typeof err === 'string' ? err : (err.message || 'خطای شبکه'));
       setLoading(false);
       setStatusText('');
     }
@@ -144,7 +154,7 @@ export default function Home() {
         <textarea
           value={rawStory}
           onChange={(e) => setRawStory(e.target.value)}
-          placeholder="مثلاً: یک گربه سفید روی پشت‌بام در غروب آفتاب..."
+          placeholder="مثلاً: یک ربات نقره‌ای رنگ در حال قدم زدن در یک شهر بارانی در شب..."
           rows={4}
           required
           style={{ width: '100%', padding: 12, fontSize: 16, borderRadius: 8, border: '1px solid #ccc', boxSizing: 'border-box' }}
