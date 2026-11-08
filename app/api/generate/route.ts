@@ -1,36 +1,33 @@
-import { put } from '@vercel/blob';
 import { NextResponse } from 'next/server';
-
-export const maxDuration = 300;
-
-const MAGIC_HOUR_BASE = 'https://api.magichour.ai/v1';
 
 export async function POST(request: Request) {
   try {
-    const { story } = await request.json();
-    if (!story || typeof story !== 'string' || !story.trim()) {
-      return NextResponse.json({ error: 'لطفاً یک داستان معتبر ارسال کنید.' }, { status: 400 });
+    const { prompt, duration } = await request.json();
+    
+    if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
+      return NextResponse.json({ error: 'پرامپت معتبر ارسال کنید.' }, { status: 400 });
+    }
+
+    const seconds = Number(duration);
+    if (isNaN(seconds) || seconds < 3) {
+      return NextResponse.json({ error: 'مدت زمان باید حداقل ۳ ثانیه باشد.' }, { status: 400 });
     }
 
     const apiKey = process.env.MAGIC_HOUR_API_KEY;
     if (!apiKey) {
-      return NextResponse.json(
-        { error: 'MAGIC_HOUR_API_KEY در متغیرهای محیطی تنظیم نشده است.' },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: 'کلید MAGIC_HOUR_API_KEY تنظیم نشده است.' }, { status: 500 });
     }
 
-    // ۱. ثبت درخواست در Magic Hour با مدل ارزان‌تر ltx-2.5
-    const submitRes = await fetch(`${MAGIC_HOUR_BASE}/text-to-video`, {
+    const submitRes = await fetch('https://api.magichour.ai/v1/text-to-video', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'ltx-2.5', // 👈 تغییر مدل به ارزان‌ترین گزینه پلن رایگان
-        end_seconds: 3,   // حداقل زمان مجاز
-        style: { prompt: story },
+        model: 'ltx-2.5',
+        end_seconds: seconds,
+        style: { prompt: prompt }, // حالا از prompt استفاده می‌کند
         resolution: '480p',
         aspect_ratio: '16:9',
       }),
@@ -42,67 +39,8 @@ export async function POST(request: Request) {
     }
 
     const submitData = await submitRes.json();
-    const projectId = submitData.id;
-    if (!projectId) {
-      throw new Error(`project id دریافت نشد: ${JSON.stringify(submitData)}`);
-    }
-
-    // ۲. Polling تا آماده شدن ویدیو
-    let videoUrl: string | null = null;
-    const maxAttempts = 30;
-
-    for (let i = 0; i < maxAttempts; i++) {
-      await new Promise((r) => setTimeout(r, 10000));
-
-      const statusRes = await fetch(`${MAGIC_HOUR_BASE}/video-projects/${projectId}`, {
-        headers: { Authorization: `Bearer ${apiKey}` },
-      });
-
-      if (!statusRes.ok) {
-        console.warn(`Status poll ${i + 1} failed: ${statusRes.status}`);
-        continue;
-      }
-
-      const statusData = await statusRes.json();
-      if (statusData.status === 'complete') {
-        videoUrl = statusData.download?.url;
-        if (videoUrl) break;
-      } else if (statusData.status === 'error') {
-        throw new Error(`تولید ویدیو شکست خورد: ${JSON.stringify(statusData)}`);
-      }
-    }
-
-    if (!videoUrl) {
-      throw new Error('زمان انتظار (۵ دقیقه) به پایان رسید و ویدیو آماده نشد.');
-    }
-
-    // ۳. دانلود و ذخیره در Vercel Blob
-    const videoRes = await fetch(videoUrl);
-    if (!videoRes.ok) throw new Error('دانلود ویدیوی تولیدشده ناموفق بود.');
-    
-    const arrayBuffer = await videoRes.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-
-    const blob = await put(`story-video-${Date.now()}.mp4`, buffer, {
-      access: 'private',
-      contentType: 'video/mp4',
-    });
-
-    // ۴. بازگشت لینک دانلود
-    const origin = new URL(request.url).origin;
-    const downloadUrl = `${origin}/api/download?pathname=${encodeURIComponent(blob.pathname)}`;
-
-    return NextResponse.json({
-      success: true,
-      downloadUrl,
-      provider: 'Magic Hour',
-      model: 'ltx-2.5',
-    });
+    return NextResponse.json({ projectId: submitData.id });
   } catch (error: any) {
-    console.error('خطا در تولید ویدیو:', error);
-    return NextResponse.json(
-      { error: 'تولید ویدیو با خطا مواجه شد.', details: error.message },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
