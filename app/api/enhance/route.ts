@@ -1,15 +1,31 @@
-// app/api/enhance/route.ts
 import { NextResponse } from 'next/server';
 
-// لیست مدل‌های رایگان و فعال (به ترتیب اولویت)
-const FREE_MODELS = [
-  'google/gemma-4-31b-it:free',
+// لیست پشتیبان در صورتی که دریافت لیست مدل‌ها از OpenRouter با خطا مواجه شود
+const FALLBACK_MODELS = [
+  'qwen/qwen-2.5-7b-instruct:free',
   'google/gemma-4-26b-a4b-it:free',
-  'nvidia/nemotron-nano-12b-v2-vl:free',
-  'qwen/qwen3.8-27b:free',
-  'google/gemini-3.5-flash:free',
-  'inclusionai/ling-3.0-flash-vl:free'
+  'meta-llama/llama-3.3-70b-instruct:free'
 ];
+
+// تابعی برای دریافت لیست لحظه‌ای مدل‌های رایگان از OpenRouter
+async function fetchFreeModels(): Promise<string[]> {
+  try {
+    const res = await fetch('https://openrouter.ai/api/v1/models');
+    if (!res.ok) return FALLBACK_MODELS;
+    
+    const data = await res.json();
+    
+    // فیلتر کردن مدل‌هایی که پسوند :free دارند
+    const freeModels = data.data
+      .filter((m: any) => m.id.endsWith(':free'))
+      .map((m: any) => m.id);
+      
+    return freeModels.length > 0 ? freeModels : FALLBACK_MODELS;
+  } catch (error) {
+    console.warn('خطا در دریافت لیست مدل‌ها، استفاده از لیست پشتیبان');
+    return FALLBACK_MODELS;
+  }
+}
 
 export async function POST(request: Request) {
   try {
@@ -27,10 +43,15 @@ export async function POST(request: Request) {
 
     const systemPrompt = `You are an expert at writing cinematic video generation prompts. Convert the following story into a detailed, vivid, and concise English prompt suitable for an AI video generator. Focus on visual details, lighting, camera movement, and atmosphere. Return ONLY the prompt text, without any explanations or quotes.`;
 
+    // دریافت لیست مدل‌های رایگان فعال
+    const availableModels = await fetchFreeModels();
+    
     let lastError = '';
 
-    // امتحان کردن مدل‌ها به ترتیب
-    for (const modelName of FREE_MODELS) {
+    // تلاش برای استفاده از ۳ مدل اول لیست (برای سرعت بیشتر و جلوگیری از تایم‌اوت)
+    const modelsToTry = availableModels.slice(0, 3);
+
+    for (const modelName of modelsToTry) {
       try {
         console.log(`Attempting enhance with model: ${modelName}`);
 
@@ -53,14 +74,8 @@ export async function POST(request: Request) {
         });
 
         if (!res.ok) {
-          const err = await res.text();
-          // اگر خطای 429 (محدودیت نرخ) یا 404 (مدل موجود نیست) بود، به مدل بعدی برو
-          if (res.status === 429 || res.status === 404) {
-            lastError = `Model ${modelName} failed with ${res.status}`;
-            continue; // برو به مدل بعدی
-          }
-          // برای سایر خطاها (مثل 500)، یک خطای واقعی پرتاب کن
-          throw new Error(`OpenRouter request failed: ${res.status} ${err}`);
+          lastError = `Model ${modelName} failed with status ${res.status}`;
+          continue; // اگر خطا داد، برو سراغ مدل بعدی
         }
 
         const data = await res.json();
@@ -72,13 +87,12 @@ export async function POST(request: Request) {
         lastError = `Model ${modelName} returned empty prompt`;
       } catch (err: any) {
         lastError = err.message;
-        // اگر خطای شبکه بود، باز هم به مدل بعدی برو
-        continue;
+        continue; // در صورت خطای شبکه، برو سراغ مدل بعدی
       }
     }
 
-    // اگر همه مدل‌ها شکست خوردند
-    throw new Error(`همه مدل‌های رایگان در دسترس نیستند. آخرین خطا: ${lastError}`);
+    // اگر همه مدل‌های امتحان شده شکست خوردند
+    throw new Error(`متأسفانه هیچ‌کدام از مدل‌های رایگان پاسخ ندادند. آخرین خطا: ${lastError}`);
   } catch (error: any) {
     console.error('خطا در بهینه‌سازی داستان:', error);
     return NextResponse.json({ prompt: '', error: error.message }, { status: 500 });
